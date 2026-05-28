@@ -16,7 +16,7 @@ USUARIO = os.environ.get("TWITCH_USER")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK")
 
 # ID de cliente público oficial para autenticación (No es secreto)
-CLIENT_ID = "kd1unb4b3q4t581w3w8409as30b96q" 
+CLIENT_ID = "uo6dgg0wb8d6hwyd17km8hk56269v2" 
 TOKEN_FILE = "twitch_tokens.json"
 
 mensajes_enviados = 0
