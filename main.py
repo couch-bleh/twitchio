@@ -6,6 +6,7 @@ import http.server
 import socketserver
 import json
 import urllib.request
+import urllib.parse
 import os
 
 # ========================================================
@@ -28,13 +29,13 @@ def enviar_a_discord(mensaje_texto):
     req = urllib.request.Request(
         DISCORD_WEBHOOK_URL, 
         data=payload, 
-        headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+        headers={'content-type': 'application/json', 'user-agent': 'Mozilla/5.0'}
     )
     try:
         with urllib.request.urlopen(req, timeout=8) as r: pass
     except: pass
 
-# --- Sistema de Autenticación de TV Seguro (Headers Corregidos) ---
+# --- Sistema de Autenticación de TV Seguro (Formulario + Lowercase Headers) ---
 def obtener_token_tv():
     if os.path.exists(TOKEN_FILE):
         try:
@@ -46,16 +47,19 @@ def obtener_token_tv():
     print("[PASO 3] Solicitando enlace y código a la API de Twitch...")
     url_code = "https://id.twitch.tv/oauth2/device"
     
-    # Twitch exige el Client-Id en los HEADERS obligatoriamente
-    cuerpo_codigo = {"scopes": ["chat:edit", "chat:read"]}
-    data_code = json.dumps(cuerpo_codigo).encode('utf-8')
+    # Cambiamos a formato x-www-form-urlencoded (Formulario tradicional)
+    cuerpo_codigo = {
+        "client_id": CLIENT_ID,
+        "scopes": "chat:edit chat:read"
+    }
+    data_code = urllib.parse.urlencode(cuerpo_codigo).encode('utf-8')
     
     req = urllib.request.Request(
         url_code, data=data_code, method="POST",
         headers={
-            'Content-Type': 'application/json', 
-            'Client-Id': CLIENT_ID,
-            'User-Agent': 'Mozilla/5.0'
+            'content-type': 'application/x-www-form-urlencoded',
+            'client-id': CLIENT_ID,  # Forzado en minúsculas estrictas
+            'user-agent': 'Mozilla/5.0'
         }
     )
     
@@ -80,10 +84,11 @@ def obtener_token_tv():
 
     url_token = "https://id.twitch.tv/oauth2/token"
     cuerpo_token = {
+        "client_id": CLIENT_ID,
         "device_code": device_code,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
     }
-    data_token = json.dumps(cuerpo_token).encode('utf-8')
+    data_token = urllib.parse.urlencode(cuerpo_token).encode('utf-8')
     
     print("[PASO 4] Esperando a que introduzcas el código en tu celular...")
     while True:
@@ -92,9 +97,9 @@ def obtener_token_tv():
             req_t = urllib.request.Request(
                 url_token, data=data_token, method="POST",
                 headers={
-                    'Content-Type': 'application/json',
-                    'Client-Id': CLIENT_ID,
-                    'User-Agent': 'Mozilla/5.0'
+                    'content-type': 'application/x-www-form-urlencoded',
+                    'client-id': CLIENT_ID,
+                    'user-agent': 'Mozilla/5.0'
                 }
             )
             with urllib.request.urlopen(req_t, timeout=10) as r_t:
@@ -108,8 +113,8 @@ def obtener_token_tv():
             return res_t["access_token"]
         except urllib.error.HTTPError as e:
             res_err = json.loads(e.read().decode('utf-8'))
-            # Captura estados de espera "authorization_pending"
-            if res_err.get("status") == 400 or "pending" in res_err.get("message", "").lower():
+            # Captura estados de espera estándar
+            if res_err.get("status") == 400 or "pending" in res_err.get("message", "").lower() or res_err.get("message") == "authorization_pending":
                 continue
             else: 
                 raise e
@@ -167,7 +172,7 @@ class ServidorRapido(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
     def do_GET(self):
         self.send_response(200)
-        self.send_header("Content-type", "text/html")
+        self.send_header("content-type", "text/html")
         self.end_headers()
         self.wfile.write(b"OK")
 
