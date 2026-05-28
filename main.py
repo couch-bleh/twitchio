@@ -8,7 +8,9 @@ import json
 import urllib.request
 import os
 
-# VARIABLES DE ENTORNO
+# ========================================================
+# CONFIGURACIÓN DESDE LAS VARIABLES DE ENTORNO DE RENDER
+# ========================================================
 CANAL = os.environ.get("TWITCH_CANAL", "#spreen")
 USUARIO = os.environ.get("TWITCH_USER")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK")
@@ -30,9 +32,9 @@ def enviar_a_discord(mensaje_texto):
     )
     try:
         with urllib.request.urlopen(req, timeout=8) as r: pass
-    except Exception as e:
-        print(f"[Rastreo] Falló envío a Discord: {e}")
+    except: pass
 
+# --- Sistema de Autenticación de TV Seguro (Headers Corregidos) ---
 def obtener_token_tv():
     if os.path.exists(TOKEN_FILE):
         try:
@@ -43,19 +45,25 @@ def obtener_token_tv():
 
     print("[PASO 3] Solicitando enlace y código a la API de Twitch...")
     url_code = "https://id.twitch.tv/oauth2/device"
-    cuerpo_codigo = {"client_id": CLIENT_ID, "scopes": ["chat:edit", "chat:read"]}
+    
+    # Twitch exige el Client-Id en los HEADERS obligatoriamente
+    cuerpo_codigo = {"scopes": ["chat:edit", "chat:read"]}
     data_code = json.dumps(cuerpo_codigo).encode('utf-8')
     
     req = urllib.request.Request(
         url_code, data=data_code, method="POST",
-        headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+        headers={
+            'Content-Type': 'application/json', 
+            'Client-Id': CLIENT_ID,
+            'User-Agent': 'Mozilla/5.0'
+        }
     )
     
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             res = json.loads(r.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
-        print(f"[CRÍTICO] Twitch rechazó la petición (400/500). Datos: {e.read().decode('utf-8')}")
+        print(f"[CRÍTICO] Twitch rechazó la petición. Datos: {e.read().decode('utf-8')}")
         raise e
     except Exception as e:
         print(f"[CRÍTICO] Error de conexión de red con Twitch: {e}")
@@ -66,24 +74,28 @@ def obtener_token_tv():
     verification_url = res["verification_url"]
     interval = res["interval"]
 
-    aviso = f"🔑 **VINCULACIÓN REQUERIDA:**\n1. Entra a: {verification_url}\n2. Pon este código: **{user_code}**"
+    aviso = f"🔑 **VINCULACIÓN REQUERIDA:**\n1. Entra a: {verification_url}\n2. Pon este código en tu celular: **{user_code}**"
     print(f"\n{aviso}\n")
     enviar_a_discord(aviso)
 
     url_token = "https://id.twitch.tv/oauth2/token"
     cuerpo_token = {
-        "client_id": CLIENT_ID, "device_code": device_code,
+        "device_code": device_code,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
     }
     data_token = json.dumps(cuerpo_token).encode('utf-8')
     
-    print("[PASO 4] Esperando a que el usuario introduzca el código en su celular...")
+    print("[PASO 4] Esperando a que introduzcas el código en tu celular...")
     while True:
         time.sleep(interval)
         try:
             req_t = urllib.request.Request(
                 url_token, data=data_token, method="POST",
-                headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+                headers={
+                    'Content-Type': 'application/json',
+                    'Client-Id': CLIENT_ID,
+                    'User-Agent': 'Mozilla/5.0'
+                }
             )
             with urllib.request.urlopen(req_t, timeout=10) as r_t:
                 res_t = json.loads(r_t.read().decode('utf-8'))
@@ -92,20 +104,23 @@ def obtener_token_tv():
                 json.dump(res_t, f)
                 
             print("[TV Método] ¡Autorizado con éxito!")
-            enviar_a_discord("✅ **Autorización exitosa:** Bot conectado.")
+            enviar_a_discord("✅ **Autorización exitosa:** El bot ya tiene acceso seguro al chat.")
             return res_t["access_token"]
         except urllib.error.HTTPError as e:
             res_err = json.loads(e.read().decode('utf-8'))
-            if res_err.get("status") == 400 or res_err.get("message") == "authorization_pending":
+            # Captura estados de espera "authorization_pending"
+            if res_err.get("status") == 400 or "pending" in res_err.get("message", "").lower():
                 continue
-            else: raise e
-        except: continue
+            else: 
+                raise e
+        except: 
+            continue
 
 def ejecutar_bot_secuencial():
     global mensajes_enviados
     print("[PASO 2] Iniciando verificaciones de usuario...")
     if not USUARIO:
-        print("[ERROR CRÍTICO] La variable TWITCH_USER está vacía en Render. Configúrala.")
+        print("[ERROR CRÍTICO] La variable TWITCH_USER está vacía en Render.")
         return
 
     token_oauth = obtener_token_tv()
@@ -135,9 +150,8 @@ def ejecutar_bot_secuencial():
             mensajes_enviados += 1
             usar_mayusculas = not usar_mayusculas
             
-            # Reporte integrado cada 20 minutos sin usar otros hilos
             if time.time() - ult_reporte > 1200:
-                enviar_a_discord(f"📈 **Reporte (20 min):** Enviados `{mensajes_enviados}` comandos.")
+                enviar_a_discord(f"📈 **Reporte (20 min):** Enviados `{mensajes_enviados}` comandos en {CANAL}.")
                 mensajes_enviados = 0
                 ult_reporte = time.time()
                 
@@ -164,8 +178,5 @@ def iniciar_servidor_en_hilo():
 
 if __name__ == "__main__":
     print("[PASO 1] Abriendo puerto web para Render...")
-    # El servidor web se va a un hilo secundario SOLO para mantener vivo a Render
     threading.Thread(target=iniciar_servidor_en_hilo, daemon=True).start()
-    
-    # El bot corre en el hilo principal. Si muere o se traba, Render nos dirá EXACTAMENTE dónde.
     ejecutar_bot_secuencial()
