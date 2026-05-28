@@ -35,9 +35,8 @@ def enviar_a_discord(mensaje_texto):
         with urllib.request.urlopen(req) as r: pass
     except: pass
 
-# --- Sistema de Autenticación de TV Seguro (Corregido para JSON) ---
+# --- Sistema de Autenticación de TV Seguro ---
 def obtener_token_tv():
-    # Si ya existe un token guardado en esta sesión, lo usamos
     if os.path.exists(TOKEN_FILE):
         try:
             with open(TOKEN_FILE, 'r') as f:
@@ -48,7 +47,6 @@ def obtener_token_tv():
     print("[TV Método] Solicitando código de vinculación a Twitch...")
     url_code = "https://id.twitch.tv/oauth2/device"
     
-    # Twitch pide JSON estructurado
     cuerpo_codigo = {
         "client_id": CLIENT_ID,
         "scopes": ["chat:edit", "chat:read"]
@@ -67,7 +65,7 @@ def obtener_token_tv():
             res = json.loads(r.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         error_info = e.read().decode('utf-8')
-        print(f"[ERROR TWITCH API] Detalles del error 400: {error_info}")
+        print(f"[ERROR TWITCH API] Detalles: {error_info}")
         raise e
     
     device_code = res["device_code"]
@@ -75,12 +73,10 @@ def obtener_token_tv():
     verification_url = res["verification_url"]
     interval = res["interval"]
 
-    # Alerta en Discord
     aviso = f"🔑 **VINCULACIÓN REQUERIDA:**\n1. Entra a: {verification_url}\n2. Pon este código en tu celular: **{user_code}**"
     print(f"\n{aviso}\n")
     enviar_a_discord(aviso)
 
-    # Bucle de espera del token en formato JSON
     url_token = "https://id.twitch.tv/oauth2/token"
     cuerpo_token = {
         "client_id": CLIENT_ID,
@@ -109,7 +105,6 @@ def obtener_token_tv():
             return res_t["access_token"]
         except urllib.error.HTTPError as e:
             res_err = json.loads(e.read().decode('utf-8'))
-            # Si sigue pendiente la autorización, continuamos esperando en silencio
             if res_err.get("status") == 400 and "pending" in res_err.get("message", "").lower():
                 continue
             elif res_err.get("message") == "authorization_pending":
@@ -117,9 +112,12 @@ def obtener_token_tv():
             else:
                 raise e
 
-# --- Bucle Principal del Bot de Twitch ---
+# --- Bucle Principal del Bot ---
 def bot_twitch():
     global mensajes_enviados
+    # Le damos 5 segundos de cortesía para que el servidor web se asiente bien en Render
+    time.sleep(5)
+    
     if not USUARIO:
         print("[ERROR] Falta la variable de entorno TWITCH_USER.")
         return
@@ -169,7 +167,6 @@ def bot_twitch():
             except: pass
 
 def temporizador_discord():
-    global mensajes_enviados
     while True:
         time.sleep(1200)
         with bloqueo_contador:
@@ -177,12 +174,28 @@ def temporizador_discord():
             mensajes_enviados = 0
         enviar_a_discord(f"📈 **Reporte (20 min):** El bot sigue activo de fondo en Twitch. Se han enviado exitosamente `{total}` comandos en {CANAL}.")
 
-def servidor_web():
+# --- Función Servidor Web (Modificada para responder HEAD y GET instantáneos) ---
+class ServidorRapido(http.server.SimpleHTTPRequestHandler):
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Bot activo en segundo plano.")
+
+def iniciar_servidor_web():
     PORT = int(os.environ.get("PORT", 8080))
-    with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as h:
+    with socketserver.TCPServer(("", PORT), ServidorRapido) as h:
+        print(f"[Web Service] Servidor respondiendo en puerto {PORT}. Render está contento.")
         h.serve_forever()
 
 if __name__ == "__main__":
+    # 1. Arrancamos las tareas secundarias del bot en hilos paralelos
     threading.Thread(target=bot_twitch, daemon=True).start()
     threading.Thread(target=temporizador_discord, daemon=True).start()
-    servidor_web()
+    
+    # 2. Dejamos el servidor web corriendo en el hilo principal.
+    # Así Render ve que abre al instante, pone el estado en "Live" y no congela el bot.
+    iniciar_servidor_web()
