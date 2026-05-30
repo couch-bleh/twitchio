@@ -57,20 +57,22 @@ def ejecutar_bot():
     usar_mayusculas = False
     ult_reporte = time.time()
     
-    while True:
+while True:
         try:
+            # Alterna entre !loot y !LOOT de forma limpia, sin números
             comando = "!LOOT" if usar_mayusculas else "!loot"
+            
+            # Enviamos a Twitch
             s.send(f"PRIVMSG {CANAL} :{comando}\r\n".encode('utf-8'))
-            print(f"[Chat] Enviado: {comando}")
+            
+            # Muestra en los logs de Render al instante
+            print(f"[Chat] Enviado con éxito: {comando}", flush=True)
+            
             mensajes_enviados += 1
             usar_mayusculas = not usar_mayusculas
             
-            if time.time() - ult_reporte > 1200:
-                enviar_a_discord(f"📈 **Reporte (20 min):** Enviados `{mensajes_enviados}` comandos en {CANAL}.")
-                mensajes_enviados = 0
-                ult_reporte = time.time()
-                
-            time.sleep(300 + random.uniform(-0.1, 0.3))
+            # Espera de 5 minutos (300 segundos) con toque humano
+            time.sleep(300 + random.uniform(-1.0, 3.0))
         except Exception as e:
             print(f"Conexión caída: {e}. Reintentando en 10s...")
             time.sleep(10)
