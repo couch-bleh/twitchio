@@ -70,7 +70,7 @@ def ejecutar_bot():
                 mensajes_enviados = 0
                 ult_reporte = time.time()
                 
-            time.sleep(12 + random.uniform(-0.1, 0.3))
+            time.sleep(300 + random.uniform(-0.1, 0.3))
         except Exception as e:
             print(f"Conexión caída: {e}. Reintentando en 10s...")
             time.sleep(10)
