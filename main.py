@@ -14,7 +14,7 @@ import os
 CANAL = os.environ.get("TWITCH_CANAL", "#spreen")
 USUARIO = os.environ.get("TWITCH_USER")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK")
-TWITCH_TOKEN = os.environ.get("TWITCH_TOKEN")  # Tu nueva llave maestra
+TWITCH_TOKEN = os.environ.get("TWITCH_TOKEN")
 
 mensajes_enviados = 0
 
@@ -54,27 +54,23 @@ def ejecutar_bot():
     print(f"🎉 ¡ÉXITO TOTAL! Bot conectado al chat de {CANAL}.")
     enviar_a_discord(f"🤖 **Bot Activo y Conectado:** Empezando farmeo en {CANAL}.")
     
-    usar_mayusculas = False
+    usar_mayusculas = True
     ult_reporte = time.time()
     
-while True:
+    while True:
         try:
-            # Alterna entre !loot y !LOOT de forma limpia, sin números
             comando = "!LOOT" if usar_mayusculas else "!loot"
             
-            # Enviamos a Twitch
             s.send(f"PRIVMSG {CANAL} :{comando}\r\n".encode('utf-8'))
             
-            # Muestra en los logs de Render al instante
             print(f"[Chat] Enviado con éxito: {comando}", flush=True)
             
             mensajes_enviados += 1
             usar_mayusculas = not usar_mayusculas
             
-            # Espera de 5 minutos (300 segundos) con toque humano
             time.sleep(300 + random.uniform(-1.0, 3.0))
         except Exception as e:
-            print(f"Conexión caída: {e}. Reintentando en 10s...")
+            print(f"Conexión caída: {e}. Reintentando en 10s...", flush=True)
             time.sleep(10)
 
 # SERVIDOR WEB REQUISITO DE RENDER
