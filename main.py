@@ -8,9 +8,6 @@ import json
 import urllib.request
 import os
 
-# ========================================================
-# CONFIGURACIÓN DESDE LAS VARIABLES DE ENTORNO DE RENDER
-# ========================================================
 CANAL = os.environ.get("TWITCH_CANAL", "#spreen")
 USUARIO = os.environ.get("TWITCH_USER")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK")
@@ -57,23 +54,45 @@ def ejecutar_bot():
     usar_mayusculas = True
     ult_reporte = time.time()
     
+    s.setblocking(False)
+    
     while True:
         try:
             comando = "!LOOT" if usar_mayusculas else "!loot"
-            
             s.send(f"PRIVMSG {CANAL} :{comando}\r\n".encode('utf-8'))
-            
             print(f"[Chat] Enviado con éxito: {comando}", flush=True)
-            
             mensajes_enviados += 1
             usar_mayusculas = not usar_mayusculas
             
-            time.sleep(300 + random.uniform(-1.0, 3.0))
+            tiempo_espera = 300 + random.uniform(-1.0, 3.0)
+            tiempo_inicio = time.time()
+            
+            while time.time() - tiempo_inicio < tiempo_espera:
+                try:
+                    datos = s.recv(2048).decode('utf-8')
+                    if datos.startswith("PING"):
+                        s.send("PONG :tmi.twitch.tv\r\n".encode('utf-8'))
+                        print("[Sistema] PING recibido de Twitch -> PONG enviado.", flush=True)
+                except BlockingIOError:
+                    time.sleep(1)
+                except Exception:
+                    raise Exception("Conexión rota detectada al leer el socket.")
+                    
         except Exception as e:
-            print(f"Conexión caída: {e}. Reintentando en 10s...", flush=True)
+            print(f"Conexión caída: {e}. Reintentando conectar en 10s...", flush=True)
             time.sleep(10)
+            
+            s = socket.socket()
+            try:
+                s.connect(("irc.chat.twitch.tv", 6667))
+                s.send(f"PASS oauth:{TWITCH_TOKEN}\r\n".encode('utf-8'))
+                s.send(f"NICK {USUARIO}\r\n".encode('utf-8'))
+                s.send(f"JOIN {CANAL}\r\n".encode('utf-8'))
+                s.setblocking(False)
+                print("🎉 ¡Reconexión exitosa con Twitch!", flush=True)
+            except Exception as re:
+                print(f"[ERROR] No se pudo reconectar: {re}", flush=True)
 
-# SERVIDOR WEB REQUISITO DE RENDER
 class ServidorRapido(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self): self.send_response(200); self.end_headers()
     def do_GET(self):
